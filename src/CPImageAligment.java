@@ -65,7 +65,7 @@ public class CPImageAligment extends PApplet {
 
 				image(resImage, x, y);
 
-				x += resImage.width;
+				x += resImage.width + 5;
 			}
 		} else {
 			System.out.println("Noy hay imágenes que mostrar");
@@ -91,7 +91,7 @@ public class CPImageAligment extends PApplet {
 	}
 
 	void transformImage(PImage rawImage, String fileName) {
-		System.out.println("Transforming image "+fileName);
+		System.out.println("Transforming image " + fileName);
 		int imagesWidth = rawImage.width;
 		int imagesHeight = rawImage.height / 3;
 
@@ -104,7 +104,7 @@ public class CPImageAligment extends PApplet {
 		PImage redImage = rawImage.get(0, imagesHeight * 2, imagesWidth,
 				imagesHeight);
 		redImages.add(redImage);
-		
+
 		// Get the better alignments between blue, green and blue, red images.
 		System.out.println("Calculating blue, green alignment");
 		PVector bgAligment = getBetterOffsetVector(blueImage, greenImage);
@@ -112,31 +112,68 @@ public class CPImageAligment extends PApplet {
 		System.out.println("Calculating blue, red alignment");
 		PVector brAligment = getBetterOffsetVector(blueImage, redImage);
 		System.out.println(brAligment);
-		//System.out.println("Calculating green, red alignment");
-		//PVector grAligment = getBetterOffsetVector(greenImage, redImage);
-		//System.out.println(brAligment);
 		
+
 		// Create new image and set its colors
-		PImage resultImage = createImage(imagesWidth, imagesHeight, RGB);
+		int maxXOffset = (int) max(abs(bgAligment.x),abs(brAligment.x));
+		System.out.println("offsetX");
+		int maxYOffset = (int) max(abs(bgAligment.y),abs(brAligment.y));
+		int resultWidth = (imagesWidth+(2*maxXOffset));
+		int resultHeight = (imagesHeight+(2*maxYOffset));
+		PImage resultImage = createImage(resultWidth, resultHeight, RGB);
+		
+		System.out.println("Result image data");
+		System.out.println(" width: "+resultWidth);
+		System.out.println(" height: "+resultHeight);
+		
 		resultImage.loadPixels();
 		for (int x = 0; x < imagesWidth; x++) {
 			for (int y = 0; y < imagesHeight; y++) {
-				int greenX = (int) (x-bgAligment.x);
-				int greenY = (int) (y-bgAligment.y);
-				int redX = (int) (x-brAligment.x);
-				int redY = (int) (y-brAligment.y);
+//				int greenX = (int) (x - bgAligment.x);
+//				int greenY = (int) (y - bgAligment.y);
+//				int redX = (int) (x - brAligment.x);
+//				int redY = (int) (y - brAligment.y);
+//
+//				float blue = red(blueImage.get(x, y));
+//				float green = red(greenImage.get(greenX, greenY));
+//				float red = red(redImage.get(redX, redY));
+//				
+//				int resultPos = ((y+maxYOffset) * resultWidth) + x + maxXOffset;
+//				resultImage.pixels[resultPos] = color(red, green,
+//						blue);
+				float rp = 0;
+				float gp = 0;
+				float bp = 0;
 				
-				float blue = red(blueImage.get(x, y));
-				float green = red(greenImage.get(greenX, greenY));
-				float red = red(redImage.get(redX, redY));
-				resultImage.pixels[(y * imagesWidth) + x] = color(red, green,
-						blue);
+				int bluePos = ((y+maxYOffset) * resultWidth) + x + maxXOffset;
+				float blue = blue(blueImage.get(x, y));
+				
+				// Get the actual levels at this pixel
+				rp = red(resultImage.pixels[bluePos]);
+				gp = green(resultImage.pixels[bluePos]);
+				resultImage.pixels[bluePos] = color(0,0, blue);
+				
+				int greenPos = (int) (((y+maxYOffset+bgAligment.y) * resultWidth) + x + maxXOffset + bgAligment.x);
+				float green = green(greenImage.get(x, y));
+				
+				// Get the actual levels at this pixel
+				rp = red(resultImage.pixels[greenPos]);
+				bp = blue(resultImage.pixels[greenPos]);
+				resultImage.pixels[greenPos] = color(0,green, 0);
+				
+				int redPos = (int) (((y+maxYOffset+brAligment.y) * resultWidth) + x + maxXOffset + brAligment.x);
+				float red = green(greenImage.get(x, y));
+				
+				// Get the actual levels at this pixel
+				gp = green(resultImage.pixels[redPos]);
+				bp = blue(resultImage.pixels[redPos]);
+				resultImage.pixels[redPos] = color(red,0, 0);
+				
 			}
 		}
 		resultImage.updatePixels();
 		resultImage.save("../naive_results/" + fileName);
 		resultImages.add(resultImage);
-
 	}
 
 	public PVector getBetterOffsetVector(PImage image1, PImage image2) {
@@ -144,8 +181,12 @@ public class CPImageAligment extends PApplet {
 		PVector offsetVector = new PVector(0, 0);
 		int minSSD = ssd(image1, image2, offsetVector);
 		
-		for (int x = 0; x < image1.width; x++) {
-			for (int y = 0; y < image1.height; y++) {
+		// Test displacements up to 10% of the width or height
+		int maxWoffset = (int) (image1.width*0.1);
+		int maxHoffset = (int) (image1.height*0.1);
+
+		for (int x = (-maxWoffset); x < maxWoffset; x++) {
+			for (int y = (-maxHoffset); y < maxHoffset; y++) {
 				PVector offsetTest = new PVector(x, y);
 				int sqrSumTest = ssd(image1, image2, offsetTest);
 				if (sqrSumTest < minSSD) {
@@ -154,21 +195,23 @@ public class CPImageAligment extends PApplet {
 				}
 			}
 		}
-		//System.out.println(offsetVector);
+		// System.out.println(offsetVector);
 		return offsetVector;
 	}
 
 	public int ssd(PImage image1, PImage image2, PVector offset) {
 		int ssd = 0;
-		for (int x = 0; x < image1.width; x++) {
-			for (int y = 0; y < image1.height; y++) {
-				//if (x < offset.x || y < offset.y) {
-				//	ssd += PApplet.pow(brightness(image1.get(x, y)), 2);
-				//} else {
-					int x2 = (int) (x - offset.x);
-					int y2 = (int) (y - offset.y);
-					ssd += PApplet.pow(brightness(image1.get(x, y)) - brightness(image2.get(x2, y2)), 2);
-				//}
+		int xi = (int) max(0, offset.x);
+		int xlim = (int) min(image1.width, image1.width + offset.x);
+		int yi = (int) max(0, offset.y);
+		int ylim = (int) min(image1.height, image1.height + offset.x);
+
+		for (int x = xi; x < xlim; x++) {
+			for (int y = yi; y < ylim; y++) {
+				int x2 = (int) (x - offset.x);
+				int y2 = (int) (y - offset.y);
+				ssd += PApplet.pow(
+						red(image1.get(x, y)) - red(image2.get(x2, y2)), 2);
 			}
 		}
 
